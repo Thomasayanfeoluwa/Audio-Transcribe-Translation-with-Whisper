@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Whisper Speech to Text</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        max-width: 800px;
+        margin: 0 auto;
+        padding: 20px;
+        background-color: #f5f5f5;
+      }
+      .container {
+        background-color: white;
+        padding: 20px;
+        border-radius: 8px;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+      }
+      .section {
+        margin-bottom: 20px;
+        padding: 15px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+      }
+      h1 {
+        color: #333;
+        text-align: center;
+      }
+      .button {
+        background-color: #4caf50;
+        color: white;
+        padding: 10px 20px;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        margin: 5px;
+      }
+      .button:hover {
+        background-color: #45a049;
+      }
+      .button.record {
+        background-color: #f44336;
+      }
+      .button.record.recording {
+        background-color: #ff7043;
+      }
+      #transcription {
+        margin-top: 20px;
+        padding: 15px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        min-height: 100px;
+        background-color: #fff;
+      }
+      .loading {
+        display: none;
+        text-align: center;
+        margin: 10px 0;
+      }
+      input[type="text"].button {
+        width: 100%;
+        box-sizing: border-box;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>Whisper Speech to Text</h1>
+
+      <div class="section">
+        <h2>Upload Audio File</h2>
+        <form id="uploadForm" enctype="multipart/form-data">
+          <input type="file" id="audioFile" accept="audio/*" class="button" name="file" />
+
+          <!-- Free text input for language -->
+          <input type="text" name="language" placeholder="Enter language (e.g., English, French)" class="button" />
+
+          <button type="submit" class="button">Transcribe File</button>
+        </form>
+      </div>
+
+      <div class="section">
+        <h2>Record Audio</h2>
+        <button id="recordButton" class="button record">Start Recording</button>
+        <span id="recordingStatus"></span>
+      </div>
+
+      <div class="loading" id="loading">
+        <p>Processing... Please wait...</p>
+      </div>
+
+      <div class="section">
+        <h2>Transcription</h2>
+        <div id="transcription"></div>
+      </div>
+    </div>
+
+    <script>
+      // File Upload Handler
+      document.getElementById("uploadForm").addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const fileInput = document.getElementById("audioFile");
+        const file = fileInput.files[0];
+        const language = document.querySelector("input[name='language']").value;
+        if (!file) {
+          alert("Please select a file first");
+          return;
+        }
+
+        const formData = new FormData();
+        formData.append("file", file);
+        formData.append("language", language);
+
+        document.getElementById("loading").style.display = "block";
+        try {
+          const response = await fetch("/", {
+            method: "POST",
+            body: formData,
+          });
+          const data = await response.json();
+          document.getElementById("transcription").textContent = data.transcript;
+        } catch (error) {
+          console.error("Error:", error);
+          alert("Error processing the file");
+        } finally {
+          document.getElementById("loading").style.display = "none";
+        }
+      });
+
+      // Audio Recording Handler
+      let mediaRecorder;
+      let audioChunks = [];
+      const recordButton = document.getElementById("recordButton");
+      const recordingStatus = document.getElementById("recordingStatus");
+
+      recordButton.addEventListener("click", async () => {
+        if (mediaRecorder && mediaRecorder.state === "recording") {
+          mediaRecorder.stop();
+          recordButton.textContent = "Start Recording";
+          recordButton.classList.remove("recording");
+          recordingStatus.textContent = "";
+          return;
+        }
+
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          mediaRecorder = new MediaRecorder(stream);
+          audioChunks = [];
+
+          mediaRecorder.addEventListener("dataavailable", (event) => {
+            audioChunks.push(event.data);
+          });
+
+          mediaRecorder.addEventListener("stop", async () => {
+            const audioBlob = new Blob(audioChunks, { type: "audio/wav" });
+            const formData = new FormData();
+            formData.append("file", audioBlob);
+            formData.append("language", document.querySelector("input[name='language']").value);
+
+            document.getElementById("loading").style.display = "block";
+            try {
+              const response = await fetch("/", {
+                method: "POST",
+                body: formData,
+              });
+              const data = await response.json();
+              document.getElementById("transcription").textContent = data.transcript;
+            } catch (error) {
+              console.error("Error:", error);
+              alert("Error processing the recording");
+            } finally {
+              document.getElementById("loading").style.display = "none";
+            }
+          });
+
+          mediaRecorder.start();
+          recordButton.textContent = "Stop Recording";
+          recordButton.classList.add("recording");
+          recordingStatus.textContent = "Recording...";
+        } catch (error) {
+          console.error("Error:", error);
+          alert("Error accessing microphone");
+        }
+      });
+    </script>
+  </body>
+</html>
